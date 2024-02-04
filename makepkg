@@ -161,9 +161,9 @@ XZ_OPT="-e9 -T`nproc`" tar cfJ /tmp/spkg/rootfs.tar.xz * || exit 1
 # Packing package
 cd /tmp/spkg
 
-echo "name=$name" > /tmp/spkg/meta || exit 1
-echo "ver=$version" >> /tmp/spkg/meta || exit 1
-echo "depends=$depends" >> /tmp/spkg/meta || exit 1
+echo "name=\"$name\"" > /tmp/spkg/meta || exit 1
+echo "ver=\"$version\"" >> /tmp/spkg/meta || exit 1
+echo "depends=\"$depends\"" >> /tmp/spkg/meta || exit 1
 
 show_log "Packing..."
 tar cf $ROOT/$name-$version-$FLAG_ARCH.spkg * || exit 1
