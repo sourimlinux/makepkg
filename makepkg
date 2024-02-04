@@ -31,7 +31,7 @@ COLOR_YELLOW="\e[1;33m"
 FLAG_INSTALL=
 FLAG_QUIET=
 FLAG_ARCH=
-FLAG_OUTPUT=
+ROOT=$PWD
 
 # Script:
 
@@ -82,7 +82,6 @@ while getopts "hviqo:" opt; do
             echo "  -i         Install package after build"
             echo "  -a ARCH    Architecture package(defaults to your system)"
             echo "  -q         Disable build log"
-            echo "  -o FILE    Output file(.spkg)"
             exit 1
         ;;
     esac
@@ -171,6 +170,9 @@ cd /tmp/spkg
 echo "name=$name" > /tmp/spkg/meta || exit 1
 echo "ver=$version" >> /tmp/spkg/meta || exit 1
 echo "depends=$depends" >> /tmp/spkg/meta || exit 1
+
+show_log "Packing..."
+tar cf $ROOT/$name-$version-$FLAG_ARCH.spkg * || exit 1
 
 rm -rf /tmp/spkg || exit 1
 
