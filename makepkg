@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-MAKEPKG_VERSION="1.0"
+MAKEPKG_VERSION="1.1"
 
 LOG_PREFIX=">"
 
@@ -48,21 +48,21 @@ show_err() {
 }
 download() {
     show_log "Downloading $(basename $1)"
-    wget --show-progress $1 || exit 1
-}
-fetch_source() {
-    [[ ${#1} != 64 ]] && show_err "Invalid hash for the source code is specified"
-    [[ -z $2 ]]       && show_err "Specifies an empty link for the source code"
+    if [[ $1 == "git+"* ]]; then
+        GITURL=($(echo "$1" | tr '+' ' '))
+        git clone ${GITURL[1]} || exit 1
+    else
+        wget $1 || exit 1
 
-    if [[ ! -f $(basename $2) ]]; then
-        download $2
-        fetch_source $@
-        return
+        show_log "\tUnpacking..."
+        if [[ $srcfile == *".tar"* ]]; then
+            tar xf $srcfile || exit 1
+        elif [[ $srcfile == *".zip" ]]; then
+            unzip -q $srcfile || exit 1
+        else
+            show_err "Unsupported archive file '$srcfile'"
+        fi
     fi
-
-    show_log "\tChecking the hash(sha256)"
-    echo "$1 $(basename $2)" | sha256sum -c --status \
-                            || show_err "The file does not match the hash"
 }
 
 while getopts "hviqo:" opt; do
@@ -121,28 +121,14 @@ command pushd ~/.cache/spkg-makepkg/$name > /dev/null
 cd src
 
 # Fetching source
-show_log "Checking/Download source"
-for ((i = 0; i < ${#source[@]}; i++)); do
-    src="${source[$i]}"
-    hash="${source_sha256[$i]}"
-    
-    fetch_source $hash $src
-done
 
 # Unpacking source
-show_log "Unpacking sources:"
 for src in ${source[@]}; do
+    show_log "Checking '$srcfile'"
     srcfile=$(basename $src)
 
-    show_log "\tUnpacking '$srcfile'..."
-
-    if [[ $srcfile == *".tar"* ]]; then
-        tar xf $srcfile || exit 1
-    elif [[ $srcfile == *".zip" ]]; then
-        unzip -q $srcfile || exit 1
-    else
-        show_err "Unsupported archive file '$srcfile'"
-    fi
+    show_log "\tDownload..."
+    download $src
 done
 
 # Building
