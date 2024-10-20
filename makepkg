@@ -1,0 +1,160 @@
+#!/bin/bash
+
+# makepkg - A utility for automating the assembly of packages for SPKG
+# Copyright (C) 2024 Andrey Stekolnikov (honakac@yandex.ru)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+MAKEPKG_VERSION="1.0"
+
+LOG_PREFIX=" *"
+
+COLOR_RESET="\e[0m"
+COLOR_BOLD="\e[1m"
+COLOR_RED="\e[31m"
+COLOR_GREEN="\e[32m"
+COLOR_BLUE="\e[34m"
+COLOR_CYAN="\e[36m"
+COLOR_YELLOW="\e[1;33m"
+
+FLAG_QUIET=
+FLAG_ARCH=`uname -m`
+FLAG_INPUT=pkgbuild
+ROOT=$PWD
+
+# Script:
+
+show_msg() {
+    echo -e "$COLOR_BOLD$1 $COLOR_RESET$COLOR_BOLD${@:2}$COLOR_RESET"
+}
+show_log() {
+    show_msg "${COLOR_BLUE}$LOG_PREFIX" $@
+}
+show_err() {
+    show_msg "${COLOR_RED}$LOG_PREFIX" $@
+    exit 1
+}
+download() {
+    show_log "Downloading $(basename $1)"
+    if [[ $1 == "git+"* ]]; then
+        GITURL=($(echo "$1" | tr '+' ' '))
+        git clone ${GITURL[1]} || exit 1
+    else
+        wget $1 || exit 1
+
+        show_log "\tUnpacking..."
+        if [[ $srcfile == *".tar"* ]]; then
+            tar xf $srcfile || exit 1
+        elif [[ $srcfile == *".zip" ]]; then
+            unzip -q $srcfile || exit 1
+        else
+            show_err "Unsupported archive file '$srcfile'"
+        fi
+    fi
+}
+while getopts "hviqo:" opt; do
+    case $opt in
+        i)  FLAG_INPUT="$OPTARG"        ;;
+        q)  FLAG_QUIET=y          ;;
+        o)  FLAG_OUTPUT="$OPTARG" ;;
+        a)  FLAG_ARCH="$OPTARG"   ;;
+        v)
+            echo "makepkg v$MAKEPKG_VERSION"
+            exit 1
+        ;;
+        ? | h)
+            echo "Usage: $0 OPTIONS FILE"
+            echo "Options:"
+            echo "  -h         Show this message"
+            echo "  -v         Show version"
+            echo "  -i FILE    Script file(default:pkgbuild)"
+            echo "  -a ARCH    Architecture package(default:`uname -m`)"
+            echo "  -q         Disable build log"
+            exit 1
+        ;;
+    esac
+done
+shift $((OPTIND -1))
+
+if [[ $EUID == 0 ]]; then
+    echo -ne $COLOR_RED$COLOR_BOLD
+    echo "Makepkg was run as root user."
+    echo "This can damage your system."
+    echo "Are you sure you want to continue?"
+    read -p "Press Enter to continue."
+    echo -ne $COLOR_RESET
+fi
+if [[ ! -f $FLAG_INPUT ]]; then
+    show_err "'$1' file not found"
+fi
+
+#######################################
+source $FLAG_INPUT || exit 1
+
+# Creating cache/temp dirs
+rm -rf /tmp/spkg
+mkdir -p /tmp/spkg
+for d in src root; do
+    if [[ ! -d ~/.cache/spkg-makepkg/$name/$d ]]; then
+        show_log "Creating cache dir"
+        rm -rf ~/.cache/spkg-makepkg/$name/root
+        mkdir -p ~/.cache/spkg-makepkg/$name/{src,root} || exit 1
+    fi
+done
+
+command pushd ~/.cache/spkg-makepkg/$name > /dev/null
+
+cd src
+
+# Fetching source
+
+# Unpacking source
+for src in ${source[@]}; do
+    srcfile=$(basename $src)
+    show_log "Checking '$srcfile'"
+
+    show_log "\tDownload..."
+    download $src
+done
+
+# Building
+show_log "Start building package..."
+BUILD_TMP=$(declare -f package)
+FAKEROOT_COMMAND="name=\"$name\"; version=\"$version\"; depends=\"$depends\"; $BUILD_TMP; package ~/.cache/spkg-makepkg/$name/root"
+if [[ -z $FLAG_QUIET ]]; then
+    fakeroot -- bash -c "$FAKEROOT_COMMAND" || exit 1
+else
+    fakeroot -- bash -c "$FAKEROOT_COMMAND > /dev/null" || exit 1
+fi
+
+# Packing rootfs
+show_log "Packing rootfs..."
+cd ../root
+find . -type f -name "*" > /tmp/spkg/files
+XZ_OPT="-e9 -T`nproc`" tar cfJ /tmp/spkg/rootfs.tar.xz * || exit 1
+
+# Packing package
+cd /tmp/spkg
+echo "name=\"$name\"" > /tmp/spkg/meta || exit 1
+echo "ver=\"$version\"" >> /tmp/spkg/meta || exit 1
+echo "depends=\"$depends\"" >> /tmp/spkg/meta || exit 1
+
+show_log "Packing..."
+tar cf $ROOT/$name-$version-$FLAG_ARCH.spkg * || exit 1
+
+rm -rf /tmp/spkg || exit 1
+
+command popd > /dev/null
+
+show_log "Done!"
