@@ -31,7 +31,7 @@ COLOR_YELLOW="\e[1;33m"
 FLAG_QUIET=
 FLAG_ARCH=`uname -m`
 FLAG_INPUT=pkgbuild
-ROOT=$PWD
+ROOT="$PWD"
 
 # Script:
 
@@ -46,24 +46,29 @@ show_err() {
     exit 1
 }
 download() {
-    show_log "Downloading $(basename $1)"
-    if [[ $1 == "git+"* ]]; then
-        GITURL=($(echo "$1" | tr '+' ' '))
-        git clone ${GITURL[1]} || exit 1
+    srcfile="$(basename $1)"
+    if [[ -e $srcfile ]]; then
+        show_log "Skip downloading $srcfile"
     else
-        wget $1 || exit 1
-
-        show_log "\tUnpacking..."
-        if [[ $srcfile == *".tar"* ]]; then
-            tar xf $srcfile || exit 1
-        elif [[ $srcfile == *".zip" ]]; then
-            unzip -q $srcfile || exit 1
+        show_log "Downloading $srcfile"
+        if [[ $1 == "git+"* ]]; then
+            GITURL=($(echo "$1" | tr '+' ' '))
+            git clone ${GITURL[1]} || exit 1
         else
-            show_err "Unsupported archive file '$srcfile'"
+            wget $1 || exit 1
+
+            show_log "\tUnpacking..."
+            if [[ $srcfile == *".tar"* ]]; then
+                tar xf $srcfile || exit 1
+            elif [[ $srcfile == *".zip" ]]; then
+                unzip -q $srcfile || exit 1
+            else
+                show_err "Unsupported archive file '$srcfile'"
+            fi
         fi
     fi
 }
-while getopts "hviqo:" opt; do
+while getopts "hvqo:i:a:" opt; do
     case $opt in
         i)  FLAG_INPUT="$OPTARG"        ;;
         q)  FLAG_QUIET=y          ;;
@@ -121,10 +126,6 @@ cd src
 
 # Unpacking source
 for src in ${source[@]}; do
-    srcfile=$(basename $src)
-    show_log "Checking '$srcfile'"
-
-    show_log "\tDownload..."
     download $src
 done
 
@@ -147,6 +148,7 @@ XZ_OPT="-e9 -T`nproc`" tar cfJ /tmp/spkg/rootfs.tar.xz * || exit 1
 # Packing package
 cd /tmp/spkg
 echo "name=\"$name\"" > /tmp/spkg/meta || exit 1
+echo "arch=\"$FLAG_ARCH\"" >> /tmp/spkg/meta || exit 1
 echo "ver=\"$version\"" >> /tmp/spkg/meta || exit 1
 echo "depends=\"$depends\"" >> /tmp/spkg/meta || exit 1
 
