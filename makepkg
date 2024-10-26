@@ -31,6 +31,7 @@ COLOR_YELLOW="\e[1;33m"
 FLAG_QUIET=
 FLAG_ARCH=`uname -m`
 FLAG_INPUT=pkgbuild
+FLAG_SKIP_SU=
 ROOT="$PWD"
 
 # Script:
@@ -62,18 +63,17 @@ download() {
                 tar xf $srcfile || exit 1
             elif [[ $srcfile == *".zip" ]]; then
                 unzip -q $srcfile || exit 1
-            else
-                show_err "Unsupported archive file '$srcfile'"
             fi
         fi
     fi
 }
-while getopts "hvqo:i:a:" opt; do
+while getopts "hvqso:i:a:" opt; do
     case $opt in
         i)  FLAG_INPUT="$OPTARG"        ;;
-        q)  FLAG_QUIET=y          ;;
-        o)  FLAG_OUTPUT="$OPTARG" ;;
-        a)  FLAG_ARCH="$OPTARG"   ;;
+        q)  FLAG_QUIET=y                ;;
+        o)  FLAG_OUTPUT="$OPTARG"       ;;
+        a)  FLAG_ARCH="$OPTARG"         ;;
+        s)  FLAG_SKIP_SU=y              ;;
         v)
             echo "makepkg v$MAKEPKG_VERSION"
             exit 1
@@ -86,13 +86,14 @@ while getopts "hvqo:i:a:" opt; do
             echo "  -i FILE    Script file(default:pkgbuild)"
             echo "  -a ARCH    Architecture package(default:`uname -m`)"
             echo "  -q         Disable build log"
+            echo "  -s         Skipping the startup warning under superuser"
             exit 1
         ;;
     esac
 done
 shift $((OPTIND -1))
 
-if [[ $EUID == 0 ]]; then
+if [[ $EUID == 0 && -z $FLAG_SKIP_SU ]]; then
     echo -ne $COLOR_RED$COLOR_BOLD
     echo "Makepkg was run as root user."
     echo "This can damage your system."
@@ -105,7 +106,15 @@ if [[ ! -f $FLAG_INPUT ]]; then
 fi
 
 #######################################
+revision=
+provides=
 source $FLAG_INPUT || exit 1
+if [[ -z $revision ]]; then
+    revision=1
+fi
+
+echo "Clear cache"
+rm -rf ~/.cache/spkg-makepkg/$name || exit 1
 
 # Creating cache/temp dirs
 rm -rf /tmp/spkg
@@ -138,6 +147,7 @@ if [[ -z $FLAG_QUIET ]]; then
 else
     fakeroot -- bash -c "$FAKEROOT_COMMAND > /dev/null" || exit 1
 fi
+ROOT_PATH="$PWD"
 
 # Packing rootfs
 show_log "Packing rootfs..."
@@ -147,13 +157,17 @@ XZ_OPT="-e9 -T`nproc`" tar cfJ /tmp/spkg/rootfs.tar.xz * || exit 1
 
 # Packing package
 cd /tmp/spkg
-echo "name=\"$name\"" > /tmp/spkg/meta || exit 1
-echo "arch=\"$FLAG_ARCH\"" >> /tmp/spkg/meta || exit 1
-echo "ver=\"$version\"" >> /tmp/spkg/meta || exit 1
-echo "depends=\"$depends\"" >> /tmp/spkg/meta || exit 1
+echo "name=\"$name\""                          > /tmp/spkg/meta || exit 1
+echo "maintainer=\"$maintainer\""             >> /tmp/spkg/meta || exit 1
+echo "arch=\"$FLAG_ARCH\""                    >> /tmp/spkg/meta || exit 1
+echo "ver=\"$version\""                       >> /tmp/spkg/meta || exit 1
+echo "revision=\"$revision\""                 >> /tmp/spkg/meta || exit 1
+echo "depends=\"$depends\""                   >> /tmp/spkg/meta || exit 1
+echo "provides=\"$provides\""                 >> /tmp/spkg/meta || exit 1
+echo "size=\"`du -bs $ROOT_PATH/ | cut -f1`\"" >> /tmp/spkg/meta || exit 1
 
 show_log "Packing..."
-tar cf $ROOT/$name-$version-$FLAG_ARCH.spkg * || exit 1
+tar cf $ROOT/$name-${version}_${revision}-$FLAG_ARCH.spkg * || exit 1
 
 rm -rf /tmp/spkg || exit 1
 
