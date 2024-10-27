@@ -1,3 +1,4 @@
 #!/bin/bash
 
+mkdir -p $DESTDIR/usr/bin/
 install -m 755 makepkg $DESTDIR/usr/bin

@@ -147,11 +147,11 @@ if [[ -z $FLAG_QUIET ]]; then
 else
     fakeroot -- bash -c "$FAKEROOT_COMMAND > /dev/null" || exit 1
 fi
-ROOT_PATH="$PWD"
 
 # Packing rootfs
 show_log "Packing rootfs..."
 cd ../root
+ROOT_PATH="$PWD"
 find . -type f -name "*" > /tmp/spkg/files
 XZ_OPT="-e9 -T`nproc`" tar cfJ /tmp/spkg/rootfs.tar.xz * || exit 1
 
