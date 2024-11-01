@@ -167,9 +167,10 @@ echo "provides=\"$provides\""                 >> /tmp/spkg/meta || exit 1
 echo "size=\"`du -bs $ROOT_PATH/ | cut -f1`\"" >> /tmp/spkg/meta || exit 1
 
 show_log "Packing..."
+sudo chown -R root:root .
 tar cf $ROOT/$name-${version}_${revision}-$FLAG_ARCH.spkg * || exit 1
 
-rm -rf /tmp/spkg || exit 1
+sudo rm -rf /tmp/spkg || exit 1
 
 command popd > /dev/null
 
