@@ -161,6 +161,7 @@ echo "name=\"$name\""                          > /tmp/spkg/meta || exit 1
 echo "maintainer=\"$maintainer\""             >> /tmp/spkg/meta || exit 1
 echo "arch=\"$FLAG_ARCH\""                    >> /tmp/spkg/meta || exit 1
 echo "ver=\"$version\""                       >> /tmp/spkg/meta || exit 1
+echo "confs=\"$confs\""                       >> /tmp/spkg/meta || exit 1
 echo "revision=\"$revision\""                 >> /tmp/spkg/meta || exit 1
 echo "depends=\"$depends\""                   >> /tmp/spkg/meta || exit 1
 echo "provides=\"$provides\""                 >> /tmp/spkg/meta || exit 1
